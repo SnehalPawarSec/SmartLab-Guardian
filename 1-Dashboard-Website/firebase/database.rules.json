@@ -1,0 +1,18 @@
+{
+  "rules": {
+    "smartlab": {
+      ".read": "auth != null",
+      "hardware":   { ".write": true },
+      "sensors":    { ".write": true },
+      "energy":     { ".read": true, ".write": true },
+      "energyLog":  { ".write": true, ".indexOn": ["t"] },
+      "alerts":     { ".write": true, ".indexOn": ["t"] },
+      "events":     { ".write": true, ".indexOn": ["t"] },
+      "computers":  { ".read": true, ".write": true },
+      "pcDaily":    { ".write": true },
+      "pcCommands": { ".read": true, ".write": true },
+      "commands":   { ".read": true, ".write": true },
+      "settings":   { ".read": true, ".write": "auth != null && auth.token.email == 'staff@smartlab.local'" }
+    }
+  }
+}

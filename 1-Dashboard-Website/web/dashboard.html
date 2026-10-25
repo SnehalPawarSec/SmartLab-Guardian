@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dashboard · SmartLab Guardian</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%228%22 fill=%22%2316392b%22/%3E%3Cpath d=%22M9 17l5 5 9-11%22 stroke=%22%239fe0bb%22 stroke-width=%223.5%22 fill=%22none%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="css/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body class="guarded">
+  <main class="page">
+    <div class="page-head">
+      <div>
+        <div class="eyebrow" id="labLine">Computer Lab · Live</div>
+        <h1>Laboratory Dashboard</h1>
+        <p class="sub">Live energy use of the lab computers, lights and fan.</p>
+      </div>
+      <span class="badge warn" id="conn">● Connecting</span>
+    </div>
+
+    <div class="banner" id="offlineBanner" hidden>
+      <b>ESP32 is not sending data.</b> Computer values still update live; lights and fan show the last reading.
+    </div>
+    <div class="banner bad-banner" id="crowdBanner" hidden></div>
+
+    <section class="grid stats">
+      <div class="card stat staff-only"><div class="label">People in Lab</div><div class="value" id="sPeople">--</div><div class="hint" id="sPeopleHint"></div></div>
+      <div class="card stat"><div class="label">Total Power Now</div><div class="value" id="sTotal">--</div><div class="hint">Computers + lights + fan</div></div>
+      <div class="card stat"><div class="label">Energy Today</div><div class="value" id="sToday">--</div></div>
+      <div class="card stat"><div class="label">Cost Today</div><div class="value" id="sCost">₹ --</div><div class="hint" id="sTariff"></div></div>
+      <div class="card stat"><div class="label">Computers Online</div><div class="value" id="sPcs">--</div><div class="hint" id="sPcsHint"></div></div>
+      <div class="card stat"><div class="label">Lights / Fan</div><div class="value" id="sLf">--</div></div>
+      <div class="card stat"><div class="label">Open Alerts</div><div class="value" id="sAlerts">--</div></div>
+    </section>
+
+    <section class="card" style="margin-bottom:20px">
+      <div class="card-head"><h2>Live Power Breakdown</h2><span class="meta" id="srcMeta">Same values as the ESP32 OLED</span></div>
+      <div class="tiles">
+        <div class="tile"><div class="label">Computers</div><div class="value" id="bPcW">--</div><div class="hint" id="bPcN"></div></div>
+        <div class="tile"><div class="label">Lights + Fan</div><div class="value" id="bLfW">--</div></div>
+        <div class="tile"><div class="label">Total now</div><div class="value" id="bTotW">--</div></div>
+        <div class="tile"><div class="label">Computers today</div><div class="value" id="bPcKwh">--</div></div>
+        <div class="tile"><div class="label">Lights + Fan today</div><div class="value" id="bLfWh">--</div></div>
+        <div class="tile"><div class="label">Total today</div><div class="value" id="bTotKwh">--</div></div>
+      </div>
+    </section>
+
+    <section class="grid two staff-only">
+      <div class="card">
+        <div class="card-head"><h2>Lab Status</h2><span class="meta" id="hwTime">Waiting for data</span></div>
+        <div class="tiles">
+          <div class="tile"><div class="label">Mode</div><div class="value" id="tMode">--</div></div>
+          <div class="tile"><div class="label">Lights</div><div class="value" id="tLight">--</div></div>
+          <div class="tile"><div class="label">Fan</div><div class="value" id="tFan">--</div></div>
+          <div class="tile"><div class="label">People (camera)</div><div class="value" id="tPeople">--</div></div>
+          <div class="tile"><div class="label">Camera</div><div class="value" id="tCam">--</div></div>
+          <div class="tile" id="tilePir"><div class="label">PIR motion</div><div class="value" id="tPir">--</div></div>
+          <div class="tile"><div class="label">Door</div><div class="value" id="tDoor">--</div></div>
+          <div class="tile"><div class="label">Auto OFF in</div><div class="value" id="tTimer">--</div></div>
+        </div>
+        <div class="row-line" style="margin-top:12px"><div><div class="t">Exam Mode</div><div class="d" id="examDesc">ON: the buzzer beeps when more than 5 people are in the lab. OFF: buzzer silent.</div></div>
+          <div class="seg" id="exam"><button data-v="1">ON</button><button data-v="0">OFF</button></div></div>
+        <p class="note">Presence = laptop camera (face detection) + door switch. Crowd alert above <b id="maxP">5</b> people.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Lights &amp; Fan (5V DC)</h2><span class="meta" id="meterSrc">--</span></div>
+        <div class="tiles">
+          <div class="tile"><div class="label">Voltage</div><div class="value" id="eV">--</div></div>
+          <div class="tile"><div class="label">Current</div><div class="value" id="eA">--</div></div>
+          <div class="tile"><div class="label">Power</div><div class="value" id="eW">--</div></div>
+          <div class="tile"><div class="label">LED strip current</div><div class="value" id="eLedA">--</div></div>
+          <div class="tile"><div class="label">Fan current</div><div class="value" id="eFanA">--</div></div>
+          <div class="tile"><div class="label">Wi-Fi signal</div><div class="value" id="eRssi">--</div></div>
+        </div>
+        <p class="note">5V DC model of the lab lights and fan. AC lab wiring is a future upgrade (PZEM-004T); this dashboard stays the same.</p>
+      </div>
+    </section>
+
+    <section class="grid two">
+      <div class="card">
+        <div class="card-head"><h2>Power Trend</h2><span class="meta">Last 60 readings (1 per minute)</span></div>
+        <div class="chart-box"><canvas id="trend"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>AI Energy Check</h2><span class="meta">Regression + anomaly score</span></div>
+        <div id="aiOut"><div class="ai-box">Click “Run AI Check” after at least 6 readings are available.</div></div>
+        <div class="btn-row" style="margin-top:14px">
+          <button class="btn primary" id="aiBtn">Run AI Check</button>
+          <a class="btn" href="analytics.html">Full analytics →</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script type="module">
+    import {
+      requireLogin, r, onValue, update, logEvent, toast, query, orderByChild, startAt, limitToLast, connectionBadge, pcState, labTotals,
+      logArray, withDefaults, serverNow, HARDWARE_OFFLINE_MS, fmt, timeStr, esc, $, chartDefaults, CHART_COLORS,
+    } from "./js/app.js";
+    import { analyse, renderAi } from "./js/ai.js";
+
+    const user = await requireLogin("dashboard.html");
+    connectionBadge("conn");
+    chartDefaults();
+
+    let settings = withDefaults(), hw = {}, energy = {}, sensors = {}, cmds = {}, computers = {}, records = [], aiRan = false;
+    const CAMERA_OFFLINE_MS = 15000;
+    const onOff = (el, v) => { el.textContent = v === undefined ? "--" : v ? "ON" : "OFF"; el.className = "value " + (v ? "state-on" : "state-off"); };
+    // Same number format as the ESP32 OLED
+    const watts = (w) => (w === undefined || w === null ? "--" : w < 10 ? `${fmt(w, 2)} W` : w < 1000 ? `${fmt(w, 1)} W` : `${fmt(w / 1000, 2)} kW`);
+    const energyTxt = (kwh) => { const wh = (kwh || 0) * 1000; return wh < 10 ? `${fmt(wh, 2)} Wh` : wh < 1000 ? `${fmt(wh, 1)} Wh` : `${fmt(kwh, 3)} kWh`; };
+
+    function draw() {
+      const hwOnline = !!hw.lastSeen && serverNow() - hw.lastSeen < HARDWARE_OFFLINE_MS;
+      $("offlineBanner").hidden = hwOnline;
+      const t = labTotals(energy, computers, hwOnline, settings);
+
+      // ---- stats (same numbers as the OLED "TOTAL LAB" / "COMPUTERS" pages)
+      $("sTotal").textContent = watts(t.totalW);
+      $("sToday").textContent = energyTxt(t.totalKwh);
+      $("sCost").textContent = `₹ ${fmt(t.cost, 2)}`;
+      $("sTariff").textContent = `at ₹${fmt(t.tariff, 2)} / kWh`;
+      $("sPcs").textContent = `${t.pcOnline} / ${t.pcTotal}`;
+      $("sPcsHint").textContent = `${t.pcActive} active · ${t.pcIdle} idle`;
+      $("sLf").textContent = hw.light === undefined ? "--" : `${hw.light ? "ON" : "OFF"} / ${hw.fan ? "ON" : "OFF"}`;
+      $("srcMeta").textContent = hwOnline ? "Live from ESP32 · same values as the OLED" : "ESP32 offline · computers only";
+
+      $("bPcW").textContent = watts(t.pcW);
+      $("bPcN").textContent = `${t.pcOnline} online`;
+      $("bLfW").textContent = watts(t.lfW);
+      $("bTotW").textContent = watts(t.totalW);
+      $("bPcKwh").textContent = energyTxt(t.pcKwh);
+      $("bLfWh").textContent = energyTxt(t.lfKwh);
+      $("bTotKwh").textContent = energyTxt(t.totalKwh);
+
+      // ---- people + crowd
+      const people = typeof hw.occupancyCount === "number" ? hw.occupancyCount : null;
+      $("sPeople").textContent = people === null ? "--" : `${people}`;
+      $("sPeopleHint").textContent = hw.occupied === undefined ? "" : hw.occupied ? (people ? `person${people === 1 ? "" : "s"} detected` : "Occupied (timer)") : "Lab empty";
+      $("crowdBanner").hidden = !hw.crowd;
+      const examOn = cmds.examMode !== false;
+      $("crowdBanner").innerHTML = `<b>Crowd alert:</b> ${people ?? "?"} people detected (limit ${hw.maxPeople ?? settings.maxPeople}). ${examOn ? "Exam Mode ON: the lab buzzer is beeping." : "Exam Mode OFF: buzzer silent."}`;
+      document.querySelectorAll("#exam button").forEach((b) => b.classList.toggle("sel", (b.dataset.v === "1") === examOn));
+      $("examDesc").textContent = `ON: the buzzer beeps when more than ${hw.maxPeople ?? settings.maxPeople} people are in the lab. OFF: buzzer silent (alert still shown).`;
+      $("maxP").textContent = hw.maxPeople ?? settings.maxPeople;
+
+      // ---- lab status (staff)
+      $("hwTime").textContent = hw.lastSeen ? `Updated ${timeStr(hw.lastSeen)}` : "Waiting for data";
+      $("tMode").textContent = hw.mode || "--";
+      onOff($("tLight"), hw.light);
+      onOff($("tFan"), hw.fan);
+      $("tPeople").textContent = people === null ? "--" : people;
+      const camOnline = cmds.cameraLastSeen && serverNow() - cmds.cameraLastSeen < CAMERA_OFFLINE_MS;
+      $("tCam").textContent = !cmds.cameraLastSeen ? "Not started" : !camOnline ? "Offline" : cmds.cameraPresent ? "Person" : "No one";
+      $("tCam").className = "value " + (camOnline && cmds.cameraPresent ? "state-on" : "state-off");
+      $("tilePir").hidden = sensors.pir === undefined;          // PIR not fitted
+      $("tPir").textContent = sensors.pir ? "Motion" : "None";
+      $("tDoor").textContent = sensors.door || "--";
+      $("tTimer").textContent = hw.emptyTimerSec > 0 ? `${hw.emptyTimerSec}s` : "—";
+
+      // ---- lights & fan electrical (staff)
+      const ok = energy.ok !== false;
+      const amps = +energy.current || 0;
+      $("meterSrc").textContent = energy.sensor === "ADC" ? "Measured (resistors + ESP32 ADC)" : "Estimated from device ratings";
+      $("eV").textContent = ok ? `${fmt(energy.voltage, 2)} V` : "--";
+      $("eA").textContent = ok ? `${fmt(amps * 1000, 0)} mA` : "--";
+      $("eW").textContent = ok ? watts(energy.power) : "--";
+      $("eLedA").textContent = ok ? `${fmt((energy.ledCurrent || 0) * 1000, 0)} mA` : "--";
+      $("eFanA").textContent = ok ? `${fmt((energy.fanCurrentEst || 0) * 1000, 0)} mA` : "--";
+      $("eRssi").textContent = hw.wifiRssi ? `${hw.wifiRssi} dBm` : "--";
+    }
+
+    // ---- chart: total, computers, lights+fan
+    const chart = new Chart($("trend"), {
+      type: "line",
+      data: { labels: [], datasets: [
+        { label: "Total (W)", data: [], borderColor: CHART_COLORS.power, backgroundColor: "rgba(59,157,216,.12)", fill: true, tension: 0.35, pointRadius: 2, borderWidth: 2 },
+        { label: "Computers (W)", data: [], borderColor: CHART_COLORS.energy, tension: 0.35, pointRadius: 0, borderWidth: 2 },
+        { label: "Lights + fan (W)", data: [], borderColor: CHART_COLORS.idle, tension: 0.35, pointRadius: 0, borderWidth: 2 },
+      ] },
+      options: { responsive: true, maintainAspectRatio: false, animation: false, interaction: { mode: "index", intersect: false },
+        scales: { y: { beginAtZero: true, title: { display: true, text: "Watts" } }, x: { ticks: { maxRotation: 45, autoSkip: true, maxTicksLimit: 12 } } } },
+    });
+    function drawChart() {
+      const last = records.slice(-60);
+      chart.data.labels = last.map((x) => timeStr(x.t));
+      chart.data.datasets[0].data = last.map((x) => +(x.p || 0).toFixed(2));
+      chart.data.datasets[1].data = last.map((x) => (x.pc === undefined ? null : +x.pc.toFixed(2)));
+      chart.data.datasets[2].data = last.map((x) => (x.lf === undefined ? null : +x.lf.toFixed(2)));
+      chart.update();
+    }
+
+    document.querySelectorAll("#exam button").forEach((b) => (b.onclick = async () => {
+      const on = b.dataset.v === "1";
+      try { await update(r("commands"), { examMode: on }); await logEvent("CONTROL", `Exam Mode ${on ? "ON" : "OFF"}`, user); toast(`Exam Mode ${on ? "ON" : "OFF"}`); }
+      catch (e) { toast(`Failed: ${e.message}`, "bad"); }
+    }));
+
+    function runAi() { $("aiOut").innerHTML = renderAi(analyse(records, settings, computers, pcState), esc); }
+    $("aiBtn").onclick = () => { runAi(); aiRan = true; };
+
+    // ---- live listeners
+    onValue(r("settings"), (s) => { settings = withDefaults(s.val()); $("labLine").textContent = `${settings.labName} · Live`; draw(); });
+    onValue(r("hardware"), (s) => { hw = s.val() || {}; draw(); });
+    onValue(r("sensors"), (s) => { sensors = s.val() || {}; draw(); });
+    onValue(r("energy"), (s) => { energy = s.val() || {}; draw(); });
+    onValue(r("commands"), (s) => { cmds = s.val() || {}; draw(); });
+    onValue(r("computers"), (s) => { computers = s.val() || {}; draw(); });
+    onValue(query(r("alerts"), limitToLast(200)), (s) => {
+      $("sAlerts").textContent = Object.values(s.val() || {}).filter((a) => !a.resolved).length;
+    });
+    onValue(query(r("energyLog"), orderByChild("t"), startAt(serverNow() - 8 * 86400000)), (s) => {
+      records = logArray(s.val());
+      drawChart();
+      if (aiRan) runAi();
+    });
+    setInterval(draw, 3000);
+  </script>
+</body>
+</html>

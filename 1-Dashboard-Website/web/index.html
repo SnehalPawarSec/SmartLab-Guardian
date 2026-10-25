@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SmartLab Guardian</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%228%22 fill=%22%2316392b%22/%3E%3Cpath d=%22M9 17l5 5 9-11%22 stroke=%22%239fe0bb%22 stroke-width=%223.5%22 fill=%22none%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="topbar landing-top">
+    <a class="brand" href="index.html"><b>SmartLab</b> Guardian</a>
+    <nav class="links">
+      <a href="dashboard.html">Dashboard</a>
+      <a href="pcs.html">PC Monitoring</a>
+      <a href="alerts.html">Alerts</a>
+      <a href="events.html">Events</a>
+      <a href="analytics.html">Analytics</a>
+      <a href="controls.html">Controls</a>
+    </nav>
+    <div class="who"><a class="link-btn" href="login.html">Login</a></div>
+  </header>
+
+  <section class="hero">
+    <div class="eyebrow">IoT + Firebase + Python + AI analytics</div>
+    <h1>SmartLab Guardian</h1>
+    <p>Smart computer-lab energy management and monitoring: real-time occupancy, automatic lights and fans,
+      live energy metering, PC usage tracking and unusual energy-pattern detection.</p>
+    <div class="btn-row">
+      <a class="btn primary" href="login.html">Staff / HOD Login</a>
+      <a class="btn" href="#features">View Features</a>
+    </div>
+  </section>
+
+  <section class="grid features" id="features">
+    <div class="card"><h3>Live Monitoring</h3><p>Occupancy, door, lights, fans, voltage, current, power and every lab PC, updated in real time from Firebase.</p></div>
+    <div class="card"><h3>Automatic Control</h3><p>The ESP32 switches lights and the fan when the laptop camera or PIR detects people, and beeps when the lab is crowded. Staff can override from the dashboard.</p></div>
+    <div class="card"><h3>PC Agent</h3><p>A small Python program on each lab PC reports CPU, RAM, active/idle state, active app and estimated power.</p></div>
+    <div class="card"><h3>AI Analytics</h3><p>Detects unusual energy readings, predicts tomorrow's usage and suggests where energy can be saved.</p></div>
+  </section>
+</body>
+</html>

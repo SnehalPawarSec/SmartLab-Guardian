@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Controls · SmartLab Guardian</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%228%22 fill=%22%2316392b%22/%3E%3Cpath d=%22M9 17l5 5 9-11%22 stroke=%22%239fe0bb%22 stroke-width=%223.5%22 fill=%22none%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="guarded">
+  <main class="page">
+    <div class="page-head">
+      <div>
+        <div class="eyebrow">Staff controls</div>
+        <h1>Controls</h1>
+        <p class="sub">Commands go to Firebase <code>/smartlab/commands</code>. The ESP32 applies them within about 2 seconds.</p>
+      </div>
+      <span class="badge warn" id="conn">● Connecting</span>
+    </div>
+
+    <section class="grid two">
+      <div class="card">
+        <div class="card-head"><h2>Lights &amp; Fan</h2><span class="meta" id="confirm">--</span></div>
+        <div class="row-line"><div><div class="t">Mode</div><div class="d">AUTO: camera + door decide. MANUAL: your buttons decide.</div></div>
+          <div class="seg" id="mode"><button data-v="AUTO">Auto</button><button data-v="MANUAL">Manual</button></div></div>
+        <div class="row-line"><div><div class="t">Lights (LED strip)</div><div class="d" id="lightState">--</div></div>
+          <div class="btn-row"><button class="btn small" data-dev="light" data-v="1">Force ON</button><button class="btn small" data-dev="light" data-v="0">Force OFF</button></div></div>
+        <div class="row-line"><div><div class="t">Fan</div><div class="d" id="fanState">--</div></div>
+          <div class="btn-row"><button class="btn small" data-dev="fan" data-v="1">Force ON</button><button class="btn small" data-dev="fan" data-v="0">Force OFF</button></div></div>
+        <div class="row-line"><div><div class="t">Exam Mode (buzzer)</div><div class="d" id="examDesc">ON: buzzer beeps when the lab is crowded. OFF: buzzer silent.</div></div>
+          <div class="seg" id="exam"><button data-v="1">ON</button><button data-v="0">OFF</button></div></div>
+        <div class="row-line"><div><div class="t">Test buzzer</div><div class="d">Beeps 3 times now (checks the buzzer wiring)</div></div>
+          <button class="btn small" id="testBuzzer">Beep</button></div>
+        <p class="note">“Force” switches the lab to MANUAL mode. Press Auto to give control back to the sensors.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Real Occupancy</h2><span class="meta" id="occNow">--</span></div>
+        <div class="tiles" style="margin-bottom:12px">
+          <div class="tile"><div class="label">People (camera)</div><div class="value" id="oPeople">--</div></div>
+          <div class="tile"><div class="label">Camera</div><div class="value" id="oCam">--</div></div>
+          <div class="tile" id="tileOPir"><div class="label">PIR motion</div><div class="value" id="oPir">--</div></div>
+          <div class="tile"><div class="label">Door</div><div class="value" id="oDoor">--</div></div>
+        </div>
+        <div class="row-line"><div><div class="t">Empty-lab timeout</div><div class="d">Seconds with nobody inside before lights/fan go OFF (demo 20, real 600)</div></div>
+          <div class="btn-row"><input type="number" id="timeout" min="5" max="3600" style="width:100px" /><button class="btn small primary" id="saveTimeout">Save</button></div></div>
+      </div>
+    </section>
+
+    <section class="card" style="margin-bottom:20px">
+      <div class="card-head"><h2>Hardware Setup &amp; Test</h2><span class="meta" id="diagTime">--</span></div>
+      <div class="tiles" style="margin-bottom:12px">
+        <div class="tile" id="tileDPir"><div class="label">PIR pin G13</div><div class="value" id="dPir">--</div><div class="hint" id="dPirHint"></div></div>
+        <div class="tile"><div class="label">Door pin G27</div><div class="value" id="dDoorPin">--</div><div class="hint">LOW = magnet near</div></div>
+        <div class="tile"><div class="label">Door shown as</div><div class="value" id="dDoor">--</div></div>
+        <div class="tile"><div class="label">Buzzer type</div><div class="value" id="dBuzzer">--</div></div>
+      </div>
+      <div class="row-line"><div><div class="t">Buzzer type</div><div class="d">Silent or only clicks? Try PASSIVE. Beeps all the time? Try ACTIVE LOW. Then press Beep.</div></div>
+        <div class="seg" id="bzType"><button data-v="ACTIVE">Active</button><button data-v="ACTIVE_LOW">Active LOW</button><button data-v="PASSIVE">Passive</button></div></div>
+      <div class="row-line"><div><div class="t">Door direction</div><div class="d">If the door shows OPEN when it is closed, choose Reversed.</div></div>
+        <div class="seg" id="doorInv"><button data-v="0">Normal</button><button data-v="1">Reversed</button></div></div>
+      <div class="row-line" id="pirRow"><div><div class="t">PIR test</div><div class="d">Wave a hand 1–2 m in front of the PIR: “PIR pin” must change to HIGH. Needs 5V on VCC and 60 s warm-up.</div></div>
+        <span></span></div>
+    </section>
+
+    <section class="grid two">
+      <div class="card">
+        <div class="card-head"><h2>Lab Settings</h2><span class="meta">Staff can edit</span></div>
+        <form id="settingsForm">
+          <div class="grid" style="grid-template-columns:1fr 1fr;gap:0 14px">
+            <label class="field" style="grid-column:1/-1"><span>Lab name</span><input type="text" name="labName" /></label>
+            <label class="field"><span>Seats / capacity</span><input type="number" name="seats" min="1" /></label>
+            <label class="field"><span>Crowd alert above (people)</span><input type="number" name="maxPeople" min="1" max="200" /></label>
+            <label class="field"><span>Tariff (₹ per kWh)</span><input type="number" name="tariff" step="0.1" min="0" /></label>
+            <label class="field"><span>High-power alert (W, total lab)</span><input type="number" name="highPowerW" min="1" /></label>
+            <label class="field"><span>Lab opens (hour)</span><input type="number" name="labOpenHour" min="0" max="23" /></label>
+            <label class="field"><span>Lab closes (hour)</span><input type="number" name="labCloseHour" min="1" max="24" /></label>
+            <label class="field"><span>PC idle alert (minutes)</span><input type="number" name="pcIdleMin" min="1" /></label>
+            <label class="field"><span>Lights power (W)</span><input type="number" name="lightsW" min="0" step="0.01" /></label>
+            <label class="field"><span>Fan power (W)</span><input type="number" name="fansW" min="0" step="0.01" /></label>
+          </div>
+          <button class="btn primary" type="submit">Save settings</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Maintenance</h2><span class="meta">Staff</span></div>
+        <div class="row-line"><div><div class="t">Reset lights + fan energy</div><div class="d">Sets today's lights + fan energy counter back to 0</div></div><button class="btn small" id="resetEnergy">Reset</button></div>
+        <div class="row-line"><div><div class="t">Remove offline PCs</div><div class="d">Deletes PCs that are not reporting</div></div><button class="btn small" id="cleanPcs">Remove</button></div>
+        <div class="row-line"><div><div class="t">Clear event log</div><div class="d">Deletes all entries on the Events page</div></div><button class="btn small danger" id="clearEvents">Clear</button></div>
+        <div class="row-line"><div><div class="t">Clear energy history</div><div class="d">Deletes all stored readings (graphs start again)</div></div><button class="btn small danger" id="clearLog">Clear</button></div>
+      </div>
+    </section>
+  </main>
+
+  <script type="module">
+    import { requireLogin, r, onValue, update, set, remove, get, connectionBadge, pcState, logEvent, withDefaults, serverNow, $, toast } from "./js/app.js";
+
+    const user = await requireLogin("controls.html");
+    connectionBadge("conn");
+
+    let cmd = {}, hw = {}, sensors = {};
+    const seg = (id, v) => document.querySelectorAll(`#${id} button`).forEach((b) => b.classList.toggle("sel", b.dataset.v === v));
+
+    async function send(patch, msg) {
+      try { await update(r("commands"), patch); await logEvent("CONTROL", msg, user); toast(msg); }
+      catch (e) { toast(`Failed: ${e.message}`, "bad"); }
+    }
+
+    function draw() {
+      seg("mode", cmd.mode || "AUTO");
+      seg("exam", cmd.examMode === false ? "0" : "1");
+      $("examDesc").textContent = `ON: buzzer beeps when more than ${hw.maxPeople ?? 5} people are in the lab. OFF: buzzer silent (alert still shown).`;
+      if (document.activeElement !== $("timeout")) $("timeout").value = cmd.timeoutSec || 20;
+      const st = (v) => (v === undefined ? "--" : v ? "ON" : "OFF");
+      $("lightState").textContent = `Hardware: ${st(hw.light)}${cmd.mode === "MANUAL" ? ` · command: ${st(cmd.light)}` : ""}`;
+      $("fanState").textContent = `Hardware: ${st(hw.fan)}${cmd.mode === "MANUAL" ? ` · command: ${st(cmd.fan)}` : ""}`;
+      const pending = cmd.mode === "MANUAL" && (cmd.light !== hw.light || cmd.fan !== hw.fan);
+      $("confirm").textContent = pending ? "Waiting for hardware…" : "Physical state confirmed";
+      $("occNow").textContent = hw.occupied === undefined ? "--" : hw.occupied ? "Occupied" : "Empty";
+      $("oPeople").textContent = typeof hw.occupancyCount === "number" ? hw.occupancyCount : "--";
+      const camOnline = cmd.cameraLastSeen && serverNow() - cmd.cameraLastSeen < 15000;
+      $("oCam").textContent = !cmd.cameraLastSeen ? "Not started" : !camOnline ? "Offline" : cmd.cameraPresent ? "Person" : "No one";
+      $("tileOPir").hidden = sensors.pir === undefined;
+      $("oPir").textContent = sensors.pir ? "Motion" : "None";
+      $("oDoor").textContent = sensors.door || "--";
+      const dg = hw.diag || {};
+      $("diagTime").textContent = dg.uptimeSec !== undefined ? `ESP32 up ${Math.floor(dg.uptimeSec / 60)} min` : "Flash the latest firmware to see pin states";
+      $("tileDPir").hidden = dg.pirPin === undefined;
+      $("pirRow").hidden = dg.pirPin === undefined;
+      $("dPir").textContent = dg.pirPin ? "HIGH" : "LOW";
+      $("dPir").className = "value " + (dg.pirPin ? "state-on" : "state-off");
+      $("dPirHint").textContent = dg.pirWarmup > 0 ? `warm-up ${dg.pirWarmup}s` : "HIGH = motion";
+      $("dDoorPin").textContent = dg.doorPin === undefined ? "--" : dg.doorPin ? "HIGH" : "LOW";
+      $("dDoor").textContent = sensors.door || "--";
+      $("dBuzzer").textContent = (dg.buzzer || "--").replace("_", " ");
+      seg("bzType", cmd.hwBuzzer || dg.buzzer || "ACTIVE");
+      seg("doorInv", (cmd.hwDoorInvert ?? dg.doorInvert) ? "1" : "0");
+      document.querySelectorAll("[data-dev]").forEach((b) => b.classList.toggle("on-state", cmd.mode === "MANUAL" && !!cmd[b.dataset.dev] === (b.dataset.v === "1")));
+    }
+
+    document.querySelectorAll("#mode button").forEach((b) => (b.onclick = () => {
+      const v = b.dataset.v;
+      send(v === "MANUAL" ? { mode: v, light: !!hw.light, fan: !!hw.fan } : { mode: v }, `Mode set to ${v}`);
+    }));
+    document.querySelectorAll("#exam button").forEach((b) => (b.onclick = () => {
+      const on = b.dataset.v === "1";
+      send({ examMode: on }, `Exam Mode ${on ? "ON" : "OFF"}`);
+    }));
+    document.querySelectorAll("[data-dev]").forEach((b) => (b.onclick = () => {
+      const dev = b.dataset.dev, on = b.dataset.v === "1";
+      const other = dev === "light" ? "fan" : "light";
+      send({ mode: "MANUAL", [dev]: on, ...(cmd.mode !== "MANUAL" ? { [other]: !!hw[other] } : {}) },
+        `${dev === "light" ? "Lights" : "Fan"} forced ${on ? "ON" : "OFF"}`);
+    }));
+    document.querySelectorAll("#bzType button").forEach((b) => (b.onclick = () => send({ hwBuzzer: b.dataset.v }, `Buzzer type set to ${b.dataset.v}`)));
+    document.querySelectorAll("#doorInv button").forEach((b) => (b.onclick = () => send({ hwDoorInvert: b.dataset.v === "1" }, `Door direction ${b.dataset.v === "1" ? "reversed" : "normal"}`)));
+    $("testBuzzer").onclick = () => send({ buzzerTest: `${Date.now()}` }, "Buzzer test sent");
+    $("saveTimeout").onclick = () => {
+      const t = Math.round(+$("timeout").value);
+      if (!(t >= 5 && t <= 3600)) { toast("Timeout must be 5–3600 seconds", "bad"); return; }
+      send({ timeoutSec: t }, `Empty-lab timeout set to ${t}s`);
+    };
+
+    // ---- settings
+    const form = $("settingsForm");
+    onValue(r("settings"), (s) => {
+      const v = withDefaults(s.val());
+      for (const [k, val] of Object.entries(v)) if (form.elements[k] && document.activeElement !== form.elements[k]) form.elements[k].value = val;
+    });
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const out = {};
+      for (const el of form.elements) if (el.name) out[el.name] = el.type === "number" ? Number(el.value) : el.value.trim();
+      if (out.labOpenHour >= out.labCloseHour) { toast("Opening hour must be before closing hour", "bad"); return; }
+      try { await set(r("settings"), out); await logEvent("SETTINGS", "Lab settings updated", user); toast("Settings saved"); }
+      catch (ex) { toast(`Not saved: ${ex.message}`, "bad"); }
+    };
+
+    // ---- maintenance
+    $("resetEnergy").onclick = () => { if (confirm("Reset today's lights + fan energy to 0?")) send({ resetEnergy: true }, "Lights + fan energy reset"); };
+    $("cleanPcs").onclick = async () => {
+      const pcs = (await get(r("computers"))).val() || {};
+      const off = Object.entries(pcs).filter(([, pc]) => pcState(pc) === "OFFLINE").map(([k]) => k);
+      if (!off.length) { toast("No offline PCs"); return; }
+      if (!confirm(`Remove ${off.length} offline PC(s)? They come back when their agent starts again.`)) return;
+      await update(r("computers"), Object.fromEntries(off.map((k) => [k, null])));
+      await logEvent("SETTINGS", `${off.length} offline PC(s) removed`, user);
+      toast(`${off.length} PC(s) removed`);
+    };
+    $("clearEvents").onclick = async () => { if (confirm("Delete the whole event log?")) { await remove(r("events")); await logEvent("SETTINGS", "Event log cleared", user); toast("Event log cleared"); } };
+    $("clearLog").onclick = async () => { if (confirm("Delete ALL stored energy readings? Graphs and AI start from zero.")) { await remove(r("energyLog")); await logEvent("SETTINGS", "Energy history cleared", user); toast("Energy history cleared"); } };
+
+    onValue(r("commands"), (s) => { cmd = s.val() || {}; draw(); });
+    onValue(r("hardware"), (s) => { hw = s.val() || {}; draw(); });
+    onValue(r("sensors"), (s) => { sensors = s.val() || {}; draw(); });
+    setInterval(draw, 3000);
+  </script>
+</body>
+</html>

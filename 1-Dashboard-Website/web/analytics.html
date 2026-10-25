@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Analytics · SmartLab Guardian</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%228%22 fill=%22%2316392b%22/%3E%3Cpath d=%22M9 17l5 5 9-11%22 stroke=%22%239fe0bb%22 stroke-width=%223.5%22 fill=%22none%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="css/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body class="guarded">
+  <main class="page">
+    <div class="page-head">
+      <div>
+        <div class="eyebrow">Historical view</div>
+        <h1>Analytics</h1>
+        <p class="sub">Stored readings explain the lab's energy behaviour: trends, peak hours, savings and AI predictions.</p>
+      </div>
+      <div class="seg" id="range">
+        <button data-h="1">1 hour</button><button data-h="24" class="sel">24 hours</button><button data-h="168">7 days</button>
+      </div>
+    </div>
+
+    <section class="grid stats">
+      <div class="card stat"><div class="label">Average Power</div><div class="value" id="aAvg">--</div></div>
+      <div class="card stat"><div class="label">Peak Power</div><div class="value" id="aPeak">--</div><div class="hint" id="aPeakT"></div></div>
+      <div class="card stat staff-only"><div class="label">Average Occupancy</div><div class="value" id="aOcc">--</div></div>
+      <div class="card stat"><div class="label">Total Stored Readings</div><div class="value" id="aN">--</div></div>
+      <div class="card stat"><div class="label">Energy in range</div><div class="value" id="aKwh">--</div></div>
+      <div class="card stat"><div class="label">Cost in range</div><div class="value" id="aCost">--</div></div>
+      <div class="card stat"><div class="label">Wasted (empty lab)</div><div class="value off" id="aWaste">--</div></div>
+      <div class="card stat"><div class="label">Est. saved by automation</div><div class="value on" id="aSaved">--</div><div class="hint" id="aSavedRs"></div></div>
+    </section>
+
+    <section class="card" style="margin-bottom:20px">
+      <div class="card-head"><h2>Power and Occupancy</h2><span class="meta" id="rangeMeta"></span></div>
+      <div class="chart-box tall"><canvas id="cMain"></canvas></div>
+    </section>
+
+    <section class="grid two">
+      <div class="card">
+        <div class="card-head"><h2>Daily Energy</h2><span class="meta">Last 7 days (kWh)</span></div>
+        <div class="chart-box short"><canvas id="cDaily"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Peak Hours</h2><span class="meta">Average power by hour of day</span></div>
+        <div class="chart-box short"><canvas id="cHourly"></canvas></div>
+      </div>
+    </section>
+
+    <section class="grid two">
+      <div class="card">
+        <div class="card-head"><h2>AI Energy Check</h2><span class="meta">Anomalies · prediction · advice</span></div>
+        <div id="aiOut"><div class="ai-box">Loading…</div></div>
+        <div id="anomalies" style="margin-top:14px"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Computer Usage</h2><span class="meta">Right now + today</span></div>
+        <div class="chart-box short" style="height:190px"><canvas id="cPc"></canvas></div>
+        <div class="table-wrap" style="margin-top:12px;max-height:230px;overflow:auto">
+          <table><thead><tr><th>PC</th><th class="num">Active</th><th class="num">Idle</th><th class="num">kWh today</th></tr></thead><tbody id="pcRows"></tbody></table>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>Export</h2><span class="meta">Readings in the selected range</span></div>
+      <div class="btn-row"><button class="btn" id="csv">Download CSV</button><button class="btn" id="json">Download JSON</button></div>
+    </section>
+  </main>
+
+  <script type="module">
+    import {
+      requireLogin, r, onValue, query, orderByChild, startAt, pcState, kwhUsed, logArray, withDefaults, serverNow,
+      fmt, esc, timeStr, dateTimeStr, $, chartDefaults, CHART_COLORS,
+    } from "./js/app.js";
+    import { analyse, renderAi } from "./js/ai.js";
+
+    await requireLogin("analytics.html");
+    chartDefaults();
+
+    let all = [], settings = withDefaults(), computers = {}, hours = 24;
+    const people = (x) => (typeof x.c === "number" ? x.c : x.o ? 1 : 0);
+    const inRange = () => all.filter((x) => x.t >= serverNow() - hours * 3600000);
+
+    // Keep charts fast: at most ~300 points (average of each bucket)
+    function downsample(list, max = 300) {
+      if (list.length <= max) return list;
+      const size = Math.ceil(list.length / max), out = [];
+      for (let i = 0; i < list.length; i += size) {
+        const b = list.slice(i, i + size);
+        out.push({ t: b[b.length - 1].t, p: b.reduce((s, x) => s + (x.p || 0), 0) / b.length, c: b.reduce((s, x) => s + people(x), 0) / b.length });
+      }
+      return out;
+    }
+
+    const cMain = new Chart($("cMain"), {
+      type: "line",
+      data: { labels: [], datasets: [
+        { label: "Power (W)", data: [], borderColor: CHART_COLORS.power, backgroundColor: "rgba(59,157,216,.10)", fill: true, tension: 0.3, pointRadius: 0, borderWidth: 2, yAxisID: "y" },
+        { label: "Occupancy (people)", data: [], borderColor: CHART_COLORS.occupancy, tension: 0.3, pointRadius: 0, borderWidth: 2, stepped: true, yAxisID: "y1" },
+      ] },
+      options: { responsive: true, maintainAspectRatio: false, animation: false, interaction: { mode: "index", intersect: false },
+        scales: { y: { beginAtZero: true, title: { display: true, text: "Watts" } },
+                  y1: { beginAtZero: true, position: "right", grid: { drawOnChartArea: false }, title: { display: true, text: "People" }, ticks: { precision: 0 } },
+                  x: { ticks: { maxRotation: 45, autoSkip: true, maxTicksLimit: 14 } } } },
+    });
+    const cDaily = new Chart($("cDaily"), {
+      type: "bar", data: { labels: [], datasets: [{ label: "kWh", data: [], backgroundColor: CHART_COLORS.energy, borderRadius: 6, maxBarThickness: 44 }] },
+      options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: false },
+        tooltip: { callbacks: { afterLabel: (c) => `≈ ₹${(c.raw * settings.tariff).toFixed(0)}` } } }, scales: { y: { beginAtZero: true } } },
+    });
+    const cHourly = new Chart($("cHourly"), {
+      type: "bar", data: { labels: [...Array(24).keys()].map((h) => `${String(h).padStart(2, "0")}:00`), datasets: [{ label: "Avg W", data: [], backgroundColor: [], borderRadius: 4 }] },
+      options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true }, x: { ticks: { maxTicksLimit: 12 } } } },
+    });
+    const cPc = new Chart($("cPc"), {
+      type: "doughnut", data: { labels: ["Active", "Idle", "Offline"], datasets: [{ data: [0, 0, 0], backgroundColor: [CHART_COLORS.energy, CHART_COLORS.idle, CHART_COLORS.off], borderWidth: 0 }] },
+      options: { responsive: true, maintainAspectRatio: false, animation: false, cutout: "62%", plugins: { legend: { position: "right" } } },
+    });
+
+    function draw() {
+      cMain.data.datasets[1].hidden = document.body.classList.contains("is-hod");   // HOD: energy only
+      const list = inRange();
+      $("rangeMeta").textContent = list.length ? `${dateTimeStr(list[0].t)} → ${dateTimeStr(list[list.length - 1].t)}` : "No readings in this range";
+      const n = list.length;
+      const avg = n ? list.reduce((s, x) => s + (x.p || 0), 0) / n : null;
+      const peak = n ? list.reduce((a, b) => ((b.p || 0) > (a.p || 0) ? b : a)) : null;
+      const kwh = kwhUsed(list);
+      $("aAvg").textContent = avg == null ? "--" : `${fmt(avg)} W`;
+      $("aPeak").textContent = peak ? `${fmt(peak.p)} W` : "--";
+      $("aPeakT").textContent = peak ? `at ${timeStr(peak.t)}` : "";
+      $("aOcc").textContent = n ? fmt(list.reduce((s, x) => s + people(x), 0) / n, 1) : "--";
+      $("aN").textContent = fmt(all.length);
+      $("aKwh").textContent = `${fmt(kwh, 3)} kWh`;
+      $("aCost").textContent = `₹ ${fmt(kwh * settings.tariff, 2)}`;
+
+      // Waste and savings (lights/fans vs "always ON during lab hours" baseline)
+      let wasteKwh = 0, savedKwh = 0;
+      for (let i = 1; i < list.length; i++) {
+        const a = list[i - 1], b = list[i];
+        const dtH = (b.t - a.t) / 3600000;
+        if (dtH <= 0 || dtH > 1) continue;                 // skip gaps (device off)
+        const d = b.e - a.e;
+        if (!people(b) && (b.l || b.f) && d > 0) wasteKwh += d;
+        const h = new Date(b.t).getHours();
+        if (h >= settings.labOpenHour && h < settings.labCloseHour) {
+          if (!b.l) savedKwh += (settings.lightsW / 1000) * dtH;
+          if (!b.f) savedKwh += (settings.fansW / 1000) * dtH;
+        }
+      }
+      $("aWaste").textContent = `${fmt(wasteKwh, 2)} kWh`;
+      $("aSaved").textContent = `${fmt(savedKwh, 2)} kWh`;
+      $("aSavedRs").textContent = `≈ ₹${fmt(savedKwh * settings.tariff, 0)} vs lights/fans always ON`;
+
+      const ds = downsample(list);
+      const long = hours > 24;
+      cMain.data.labels = ds.map((x) => long ? new Date(x.t).toLocaleString("en-IN", { weekday: "short", hour: "2-digit", minute: "2-digit" }) : timeStr(x.t));
+      cMain.data.datasets[0].data = ds.map((x) => Math.round(x.p || 0));
+      cMain.data.datasets[1].data = ds.map((x) => +people(x).toFixed(1));
+      cMain.update();
+
+      // Daily kWh for the last 7 days (always from all data)
+      const days = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(serverNow()); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - i);
+        const from = d.getTime(), to = from + 86400000;
+        days.push({ label: d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric" }), kwh: kwhUsed(all.filter((x) => x.t >= from && x.t < to)) });
+      }
+      cDaily.data.labels = days.map((d) => d.label);
+      cDaily.data.datasets[0].data = days.map((d) => +d.kwh.toFixed(3));
+      cDaily.update();
+
+      const a = analyse(all, settings, computers, pcState);
+      $("aiOut").innerHTML = renderAi(a, esc);
+      if (a.ready) {
+        const max = Math.max(...a.hourlyAvg);
+        cHourly.data.datasets[0].data = a.hourlyAvg.map((v) => Math.round(v));
+        cHourly.data.datasets[0].backgroundColor = a.hourlyAvg.map((v) => (v === max && v > 0 ? "#d9822b" : CHART_COLORS.power));
+        cHourly.update();
+        const last = a.anomalies.slice(-6).reverse();
+        $("anomalies").innerHTML = last.length ? `<div class="table-wrap"><table><thead><tr><th>Unusual reading</th><th class="num">Actual</th><th class="num">Expected</th></tr></thead><tbody>
+          ${last.map((x) => `<tr><td>${dateTimeStr(x.t)}</td><td class="num">${fmt(x.p)} W</td><td class="num">${fmt(x.expected)} W</td></tr>`).join("")}</tbody></table></div>` : "";
+      }
+      drawPcs();
+    }
+
+    function drawPcs() {
+      const list = Object.entries(computers).filter(([, pc]) => !pc.simulated).sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }));
+      const st = list.map(([, pc]) => pcState(pc));
+      cPc.data.datasets[0].data = ["ACTIVE", "IDLE", "OFFLINE"].map((s) => st.filter((x) => x === s).length);
+      cPc.update();
+      const h = (s) => `${(Math.round(((s || 0) / 3600) * 10) / 10).toFixed(1)} h`;
+      $("pcRows").innerHTML = list.length ? list.map(([k, pc]) => `<tr><td>${esc(pc.name || k)}${pc.user ? ` <span class="pill real">${esc(pc.user)}</span>` : ""}</td>
+        <td class="num">${h(pc.activeSecToday)}</td><td class="num">${h(pc.idleSecToday)}</td><td class="num">${fmt(pc.energyTodayKwh, 3)}</td></tr>`).join("")
+        : `<tr><td colspan="4" class="list-empty">No PCs reporting yet.</td></tr>`;
+    }
+
+    function download(name, text, type) {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([text], { type }));
+      a.download = name;
+      a.click();
+    }
+    $("csv").onclick = () => download(`smartlab-energy-${hours}h.csv`,
+      ["time,power_w,energy_kwh,occupied,people,lights,fans", ...inRange().map((x) => [new Date(x.t).toISOString(), x.p, x.e, x.o, people(x), x.l, x.f].join(","))].join("\n"), "text/csv");
+    $("json").onclick = () => download(`smartlab-energy-${hours}h.json`, JSON.stringify(inRange(), null, 2), "application/json");
+
+    document.querySelectorAll("#range button").forEach((b) => (b.onclick = () => {
+      hours = +b.dataset.h; document.querySelectorAll("#range button").forEach((x) => x.classList.toggle("sel", x === b)); draw();
+    }));
+
+    onValue(r("settings"), (s) => { settings = withDefaults(s.val()); draw(); });
+    onValue(r("computers"), (s) => { computers = s.val() || {}; drawPcs(); });
+    onValue(query(r("energyLog"), orderByChild("t"), startAt(serverNow() - 8 * 86400000)), (s) => { all = logArray(s.val()); draw(); });
+  </script>
+</body>
+</html>

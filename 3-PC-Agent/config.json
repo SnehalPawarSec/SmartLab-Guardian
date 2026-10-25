@@ -1,0 +1,11 @@
+{
+  "databaseURL": "https://smartlab-guardian-1f880-default-rtdb.asia-southeast1.firebasedatabase.app",
+  "pcName": "",
+  "intervalSec": 10,
+  "idleAfterSec": 60,
+  "powerIdleW": 0,
+  "powerMaxW": 0,
+  "reportActiveApp": true,
+  "allowRemoteLock": true,
+  "allowRemoteShutdown": false
+}

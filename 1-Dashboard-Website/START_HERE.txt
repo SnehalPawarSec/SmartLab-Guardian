@@ -1,0 +1,42 @@
+SmartLab Guardian
+=================
+
+READ THIS FIRST
+---------------
+
+1. To put this project on GitHub:
+      open  HOW_TO_UPLOAD_TO_GITHUB.pdf
+      it is in the main folder, one level above this one.
+      (step by step, written from zero - no commands, just clicking)
+
+2. To SHOW the project without any hardware (easiest - start here):
+      go to the folder  ..\4-3D-Simulation
+      double-click  START_SIMULATION.bat
+      a 3D simulation of the lab opens in the browser.
+      No internet, no Python, nothing to install.
+
+3. To RUN the real system on this computer:
+      install Python 3 from https://www.python.org/downloads/
+      -> TICK "Add python.exe to PATH" on the first screen
+      then double-click  START_SMARTLAB.bat  (in this folder)
+      the browser opens at http://localhost:5080
+      log in with   staff / Staff@123
+
+4. To build the hardware:
+      open  ..\2-ESP32-Code\WIRING_AND_SETUP.txt
+
+
+THE FOUR FOLDERS
+----------------
+
+  1-Dashboard-Website   the web dashboard + the laptop camera      (lab laptop)
+  2-ESP32-Code          the ESP32 program + wiring diagram         (ESP32 board)
+  3-PC-Agent            reports each lab computer to the dashboard (every lab PC)
+  4-3D-Simulation       3D simulation for demos and vivas          (any browser)
+
+Folders 1, 2 and 3 are the real, live system and they work together.
+Folder 4 is standalone - it is not connected to the hardware or the database.
+
+Keep the four folders together in the same parent folder.
+
+Full details: ABOUT_THIS_PROJECT.md and README.md in this folder.

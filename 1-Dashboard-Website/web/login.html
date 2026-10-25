@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Login · SmartLab Guardian</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%228%22 fill=%22%2316392b%22/%3E%3Cpath d=%22M9 17l5 5 9-11%22 stroke=%22%239fe0bb%22 stroke-width=%223.5%22 fill=%22none%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <main class="login-card">
+    <div class="eyebrow">Secure access</div>
+    <h1>SmartLab Guardian</h1>
+    <p class="sub">Use your assigned account. The dashboard changes according to your role.</p>
+    <div class="error" id="err" hidden></div>
+    <form id="form" autocomplete="on">
+      <label class="field"><span>Username</span>
+        <input type="text" id="user" name="username" placeholder="Username" autocomplete="username" required /></label>
+      <label class="field"><span>Password</span>
+        <input type="password" id="pass" name="password" placeholder="Password" autocomplete="current-password" required /></label>
+      <button class="btn primary" style="width:100%" id="btn" type="submit">Login</button>
+    </form>
+    <div class="demo-box">
+      <b>Accounts</b><br />
+      Staff: <code>staff / Staff@123</code><br />
+      HOD: <code>hod / Hod@123</code>
+    </div>
+    <p style="margin-top:18px"><a href="index.html">← Back to landing page</a></p>
+  </main>
+
+  <script type="module">
+    import { auth, login } from "./js/app.js";
+    import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+    const err = document.getElementById("err");
+    const btn = document.getElementById("btn");
+    let submitting = false;
+
+    // Already logged in -> go straight to the dashboard
+    onAuthStateChanged(auth, (u) => { if (u && !submitting) location.replace("dashboard.html"); });
+
+    document.getElementById("form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      err.hidden = true;
+      btn.disabled = true;
+      btn.textContent = "Signing in…";
+      submitting = true;
+      try {
+        await login(document.getElementById("user").value, document.getElementById("pass").value);
+        location.replace("dashboard.html");
+      } catch (ex) {
+        submitting = false;
+        err.textContent = ex.message;
+        err.hidden = false;
+        document.getElementById("pass").value = "";
+        btn.disabled = false;
+        btn.textContent = "Login";
+      }
+    });
+  </script>
+</body>
+</html>

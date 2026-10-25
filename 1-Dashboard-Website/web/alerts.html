@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Alerts · SmartLab Guardian</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%228%22 fill=%22%2316392b%22/%3E%3Cpath d=%22M9 17l5 5 9-11%22 stroke=%22%239fe0bb%22 stroke-width=%223.5%22 fill=%22none%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="guarded">
+  <main class="page">
+    <div class="page-head">
+      <div>
+        <div class="eyebrow">Safety + energy</div>
+        <h1>Alerts</h1>
+        <p class="sub">Warnings raised by the ESP32 and the PC agents: crowd in the lab, after-hours entry, high power, idle PCs.</p>
+      </div>
+      <span class="badge warn" id="conn">● Connecting</span>
+    </div>
+
+    <div class="filters">
+      <div class="seg" id="filter"><button data-f="OPEN" class="sel">Open</button><button data-f="RESOLVED">Resolved</button><button data-f="ALL">All</button></div>
+      <select id="type" style="max-width:220px"><option value="">All types</option></select>
+      <button class="btn small" id="resolveAll">Resolve all open</button>
+      <button class="btn small danger staff-only" id="clearAll">Delete resolved</button>
+    </div>
+
+    <section class="card" style="padding:0" id="list"><div class="list-empty">Loading…</div></section>
+  </main>
+
+  <script type="module">
+    import { requireLogin, r, onValue, update, remove, query, limitToLast, serverTimestamp, connectionBadge, logEvent, esc, dateTimeStr, ago, $, toast } from "./js/app.js";
+
+    const user = await requireLogin("alerts.html");
+    connectionBadge("conn");
+
+    const SEVERITY = { CROWD: "high", UNAUTHORIZED_ENTRY: "high", SENSOR_FAILURE: "high", AFTER_HOURS: "high", HIGH_POWER: "high", SENSOR: "high", SENSOR_FAIL: "high", PZEM: "medium", WIFI: "medium", OFFLINE: "medium", PC_IDLE: "info" };
+    const NAMES = { CROWD: "Crowd in lab", UNAUTHORIZED_ENTRY: "After-hours entry", SENSOR_FAILURE: "Sensor failure", AFTER_HOURS: "After-hours entry", HIGH_POWER: "High power", SENSOR: "Sensor failure", SENSOR_FAIL: "Sensor failure", PZEM: "Energy meter", WIFI: "Network", OFFLINE: "Device offline", PC_IDLE: "Idle PCs" };
+    let alerts = [], filter = "OPEN";
+
+    function draw() {
+      const type = $("type").value;
+      const shown = alerts.filter((a) => (filter === "ALL" || (filter === "OPEN") === !a.resolved) && (!type || a.type === type));
+      $("list").innerHTML = shown.length ? shown.map((a) => `
+        <div class="alert-item ${a.resolved ? "resolved" : ""}">
+          <span class="sev ${a.severity || SEVERITY[a.type] || "medium"}"></span>
+          <div class="body">
+            <div class="title">${esc(a.msg)}</div>
+            <div class="meta"><span class="tag">${esc(NAMES[a.type] || a.type || "Alert")}</span>
+              ${dateTimeStr(a.t)} · ${ago(a.t)}${a.source ? ` · from ${esc(a.source)}` : ""}
+              ${a.resolved ? ` · resolved by ${esc(a.resolvedBy || "?")}` : ""}</div>
+          </div>
+          ${a.resolved ? "" : `<button class="btn small" data-id="${esc(a.id)}">Resolve</button>`}
+        </div>`).join("") : `<div class="list-empty">${filter === "OPEN" ? "No open alerts. All good." : "No alerts yet."}</div>`;
+      $("list").querySelectorAll("[data-id]").forEach((b) => (b.onclick = () => resolve([b.dataset.id])));
+    }
+
+    async function resolve(ids) {
+      const patch = {};
+      for (const id of ids) Object.assign(patch, { [`${id}/resolved`]: true, [`${id}/resolvedBy`]: user.username, [`${id}/resolvedAt`]: serverTimestamp() });
+      await update(r("alerts"), patch);
+      await logEvent("ALERT", `${ids.length} alert(s) resolved`, user);
+      toast(`${ids.length} alert(s) resolved`);
+    }
+    $("resolveAll").onclick = () => { const ids = alerts.filter((a) => !a.resolved).map((a) => a.id); if (ids.length) resolve(ids); };
+    $("clearAll").onclick = async () => {
+      const ids = alerts.filter((a) => a.resolved).map((a) => a.id);
+      if (!ids.length || !confirm(`Delete ${ids.length} resolved alert(s)?`)) return;
+      await update(r("alerts"), Object.fromEntries(ids.map((id) => [id, null])));
+      toast("Resolved alerts deleted");
+    };
+    document.querySelectorAll("#filter button").forEach((b) => (b.onclick = () => {
+      filter = b.dataset.f; document.querySelectorAll("#filter button").forEach((x) => x.classList.toggle("sel", x === b)); draw();
+    }));
+    $("type").onchange = draw;
+
+    onValue(query(r("alerts"), limitToLast(300)), (s) => {
+      alerts = Object.entries(s.val() || {}).map(([id, a]) => ({ id, ...a })).sort((a, b) => (b.t || 0) - (a.t || 0));
+      const types = [...new Set(alerts.map((a) => a.type).filter(Boolean))];
+      const cur = $("type").value;
+      $("type").innerHTML = `<option value="">All types</option>` + types.map((t) => `<option value="${esc(t)}">${esc(NAMES[t] || t)}</option>`).join("");
+      $("type").value = types.includes(cur) ? cur : "";
+      draw();
+    });
+  </script>
+</body>
+</html>

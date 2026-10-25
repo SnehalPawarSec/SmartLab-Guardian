@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>JSON Data · SmartLab Guardian</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%228%22 fill=%22%2316392b%22/%3E%3Cpath d=%22M9 17l5 5 9-11%22 stroke=%22%239fe0bb%22 stroke-width=%223.5%22 fill=%22none%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="guarded">
+  <main class="page">
+    <div class="page-head">
+      <div>
+        <div class="eyebrow">Firebase Realtime Database</div>
+        <h1>JSON Data</h1>
+        <p class="sub">The live JSON that the ESP32, PC agents and dashboard share. Commands and settings can be edited here.</p>
+      </div>
+      <span class="badge warn" id="conn">● Connecting</span>
+    </div>
+
+    <div class="filters">
+      <select id="node" style="max-width:280px">
+        <option value="hardware">hardware (ESP32 state)</option>
+        <option value="sensors">sensors</option>
+        <option value="energy">energy (live meter: INA219 DC)</option>
+        <option value="commands">commands (editable)</option>
+        <option value="settings">settings (HOD editable)</option>
+        <option value="computers">computers (PC agents)</option>
+        <option value="pcCommands">pcCommands</option>
+        <option value="pcDaily">pcDaily</option>
+        <option value="alerts">alerts (last 50)</option>
+        <option value="events">events (last 50)</option>
+        <option value="energyLog">energyLog (last 50)</option>
+      </select>
+      <button class="btn small" id="copy">Copy</button>
+      <button class="btn small" id="download">Download</button>
+      <button class="btn small primary" id="edit" hidden>Edit JSON</button>
+    </div>
+
+    <section class="grid" style="grid-template-columns:minmax(0,1fr);gap:14px">
+      <div class="card">
+        <div class="card-head"><h2 id="path">/smartlab/hardware</h2><span class="meta" id="updated">--</span></div>
+        <pre class="json" id="out">Loading…</pre>
+        <div id="editor" hidden>
+          <textarea class="json-edit" id="text" spellcheck="false"></textarea>
+          <div class="btn-row" style="margin-top:10px"><button class="btn primary" id="save">Save to Firebase</button><button class="btn" id="cancel">Cancel</button></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>REST access</h2><span class="meta">Used by the ESP32 and Python scripts</span></div>
+        <pre class="json" id="rest" style="max-height:none"></pre>
+      </div>
+    </section>
+  </main>
+
+  <script type="module">
+    import { requireLogin, r, onValue, set, query, limitToLast, connectionBadge, logEvent, timeStr, $, toast } from "./js/app.js";
+    import { firebaseConfig } from "./js/config.js";
+
+    const user = await requireLogin("data.html");
+    connectionBadge("conn");
+
+    const LIMITED = ["alerts", "events", "energyLog"];
+    let stop = null, current = null, node = "hardware";
+
+    function canEdit(n) { return n === "commands" || (n === "settings" && user.role === "HOD"); }
+
+    function listen() {
+      if (stop) stop();
+      node = $("node").value;
+      $("path").textContent = `/smartlab/${node}`;
+      $("edit").hidden = !canEdit(node);
+      $("editor").hidden = true; $("out").hidden = false;
+      const src = LIMITED.includes(node) ? query(r(node), limitToLast(50)) : r(node);
+      stop = onValue(src, (s) => {
+        current = s.val();
+        $("out").textContent = current === null ? "null   (nothing stored here yet)" : JSON.stringify(current, null, 2);
+        $("updated").textContent = `updated ${timeStr(Date.now())}`;
+      });
+      const base = firebaseConfig.databaseURL;
+      $("rest").textContent = [
+        `GET   ${base}/smartlab/${node}.json`,
+        `PATCH ${base}/smartlab/commands.json   body: {"mode":"MANUAL","light":true}`,
+        `POST  ${base}/smartlab/alerts.json     body: {"type":"HIGH_POWER","msg":"...","t":{".sv":"timestamp"}}`,
+        "",
+        "Reading most paths needs a logged-in dashboard user. Devices can read commands, settings, computers and pcCommands.",
+      ].join("\n");
+    }
+
+    $("node").onchange = listen;
+    $("copy").onclick = async () => { await navigator.clipboard.writeText($("out").textContent); toast("Copied"); };
+    $("download").onclick = () => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([JSON.stringify(current, null, 2)], { type: "application/json" }));
+      a.download = `smartlab-${node}.json`;
+      a.click();
+    };
+    $("edit").onclick = () => {
+      $("text").value = JSON.stringify(current ?? {}, null, 2);
+      $("editor").hidden = false; $("out").hidden = true;
+    };
+    $("cancel").onclick = () => { $("editor").hidden = true; $("out").hidden = false; };
+    $("save").onclick = async () => {
+      let val;
+      try { val = JSON.parse($("text").value); } catch (e) { toast(`Invalid JSON: ${e.message}`, "bad"); return; }
+      if (typeof val !== "object" || val === null || Array.isArray(val)) { toast("The value must be a JSON object { … }", "bad"); return; }
+      try {
+        await set(r(node), val);
+        await logEvent("JSON_EDIT", `/smartlab/${node} edited from the JSON page`, user);
+        toast("Saved to Firebase");
+        $("editor").hidden = true; $("out").hidden = false;
+      } catch (e) { toast(`Not saved: ${e.message}`, "bad"); }
+    };
+    listen();
+  </script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+opencv-python>=4.8,<5
+requests>=2.31
+# Optional, more accurate (big download ~1 GB with torch):
+# ultralytics>=8.0

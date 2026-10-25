@@ -1,0 +1,75 @@
+SmartLab Guardian - FINAL WIRING + SETUP
+========================================
+5V DC model of the lab lights + fan, real lab computers measured by the PC agent.
+Presence = laptop camera (face count) + door switch. AC (PZEM-004T) = future upgrade.
+
+---------------------------------------------------------------
+A. WIRING  (matches esp32_smartlab\esp32_smartlab.ino)
+---------------------------------------------------------------
++ rail = 5V line      - rail = GND line      (ALL GNDs connected together)
+
+Power
+  ESP32 VIN  -> + rail
+  ESP32 GND  -> - rail
+  If the ESP32 restarts when the fan starts: 5V adapter + -> + rail, adapter - -> - rail,
+  remove the ESP32 VIN wire, keep ESP32 GND on the - rail, ESP32 stays on USB.
+
+0.96" OLED           VCC -> + rail (or 3V3)   GND -> - rail   SCL -> G22   SDA -> G21
+2-channel relay      VCC -> + rail   GND -> - rail   IN1 -> G25 (K1 = FAN)   IN2 -> G33 (K2 = LED STRIP)
+LED strip (K2)       + rail -> 220 ohm -> LED strip +     LED strip - -> K2 NO     K2 COM -> - rail
+5V fan 0.12A (K1)    + rail -> fan +                       fan - -> K1 NO           K1 COM -> - rail
+Door reed switch     wire 1 -> G27   wire 2 -> - rail
+Buzzer               + (long leg) -> G18   - -> - rail     (beeps when more than 5 people are in the lab)
+Laptop camera        no wires (Wi-Fi + Firebase)
+
+Pins: G21 SDA, G22 SCL, G25 fan relay, G33 LED-strip relay, G27 door, G18 buzzer.
+
+---------------------------------------------------------------
+B. FLASH THE ESP32 (Arduino IDE)
+---------------------------------------------------------------
+1. Board: File > Preferences > Additional boards URL
+   https://espressif.github.io/arduino-esp32/package_esp32_index.json
+   Tools > Board > Boards Manager > "esp32" by Espressif > Install
+2. Libraries: "Adafruit SSD1306" (Install All), "ArduinoJson" 7.x
+3. Open esp32_smartlab\esp32_smartlab.ino, lines 45-46: Wi-Fi name + password.
+   The Wi-Fi MUST have internet (phone hotspot with mobile data, or laptop Mobile Hotspot 2.4 GHz).
+4. Board: DOIT ESP32 DEVKIT V1, COM port, Upload (hold BOOT if stuck on "Connecting...")
+
+OLED shows 5 pages, 3 s each:
+  1 LAB STATUS  : mode, people (camera count), camera, door, auto-off timer
+  2 LIGHT & FAN : ON/OFF, volts, mA, watts, Wh today
+  3 COMPUTERS   : online, active/idle, PC watts, PC kWh today
+  4 TOTAL LAB   : total watts, kWh today, cost (Rs), PCs vs lights+fan
+  5 NETWORK     : Wi-Fi, signal, cloud, IP, uptime
+  More than 5 people -> "CROWD ALERT" screen + dashboard alert, and buzzer 3 beeps every 5 s
+  while EXAM MODE is ON (staff switch on the Dashboard and the Controls page; OFF = buzzer silent).
+
+---------------------------------------------------------------
+C. FIREBASE RULES (one time - lets STAFF save settings)
+---------------------------------------------------------------
+Firebase console > project smartlab-guardian-1f880 > Realtime Database > Rules tab
+> paste the whole content of firebase\database.rules.json > Publish.
+
+---------------------------------------------------------------
+D. LAB LAPTOP (camera + dashboard)  and  LAB COMPUTERS (PC agent)
+---------------------------------------------------------------
+Lab laptop:
+  1. Install Python (python.org), TICK "Add python.exe to PATH". Connect to the internet.
+  2. Double-click START_SMARTLAB.bat -> dashboard + PC agent + camera start, browser opens.
+  3. Login:  staff / Staff@123  = full control (all pages, controls, settings, PC actions)
+             hod   / Hod@123    = summary only (power, energy, cost, PCs online, lights/fan, alerts)
+Every other lab computer:
+  copy the pc_agent folder -> double-click install_agent.bat (Python)  or run SmartLabAgent.exe.
+  It reports: computer name, logged-in user, CPU/RAM, active/idle time, power (W), energy + cost today.
+
+Camera window keys: A = AUTO   O = force OFF   N = force ON   Q = quit
+Each face box shows "person 0.93". If a non-person gets a box, raise MIN_SCORE (0.85 -> 0.9)
+at the top of camera_detector\camera_presence.py. Point the camera where people face it.
+
+---------------------------------------------------------------
+E. EXPECTED RESULT
+---------------------------------------------------------------
+1 person in front of the camera -> People: 1, relays click, fan + LED strip ON
+Walk away                       -> People: 0, "Auto OFF in 20s" on OLED, then OFF
+6+ people                       -> CROWD ALERT on OLED, buzzer beeps, dashboard red banner + alert
+Dashboard "Total Power Now" = OLED "TOTAL LAB" page (computers + lights + fan)

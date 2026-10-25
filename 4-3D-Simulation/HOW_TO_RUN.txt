@@ -1,0 +1,30 @@
+SmartLab Guardian - 3D Simulation
+=================================
+
+HOW TO RUN
+  1. Copy this whole folder (or the zip) to the laptop and unzip it.
+  2. Double-click  START_SIMULATION.bat
+     It opens the simulation in Chrome (or Edge). Wait about 5-10 seconds while it
+     loads the 3D people ("Loading 3D people... 15 / 15").
+  No internet, Python or installation is needed. Keep both files in the same folder.
+
+WHAT TO CLICK (left panel "Demo guide", in this order)
+  1 Camera detection     - laptop camera counts the faces, lights ON / OFF
+  2 Full automatic demo  - door -> lights ON -> camera sees the student -> timer -> OFF
+  3 Door sensor          - door opens, nobody enters
+  4 Exam crowd alert     - more than 5 people -> CROWD ALERT + buzzer (Exam Mode)
+  5 Energy monitoring    - computers + lights + fans, cost in Rs
+  6 Manual override      - staff force OFF / ON, then AUTO
+
+  Space = pause / resume     N = next step     Reset = start again
+  Views: Top, Left, Right, Front, Back, Laptop cam, Corridor, Follow, Entrance
+  Click the page once so the browser allows the buzzer sound.
+
+TIPS
+  - Slow laptop? Open "Manual controls" and untick "High quality (slower)".
+  - This is a standalone simulation. It is not connected to the ESP32, Firebase
+    or the web dashboard (those are shown separately with the real hardware).
+
+FILES
+  START_SIMULATION.bat            opens the simulation
+  SmartLab_3D_Digital_Twin.html   the complete simulation (one file, about 11 MB)

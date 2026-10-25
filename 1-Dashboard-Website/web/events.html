@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Events · SmartLab Guardian</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%228%22 fill=%22%2316392b%22/%3E%3Cpath d=%22M9 17l5 5 9-11%22 stroke=%22%239fe0bb%22 stroke-width=%223.5%22 fill=%22none%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="guarded">
+  <main class="page">
+    <div class="page-head">
+      <div>
+        <div class="eyebrow">Activity log</div>
+        <h1>Events</h1>
+        <p class="sub">Everything that happened in the lab: entries and exits, lights and fans, mode changes, PCs going online/offline and staff actions.</p>
+      </div>
+      <span class="badge warn" id="conn">● Connecting</span>
+    </div>
+
+    <div class="filters">
+      <select id="type" style="max-width:220px"><option value="">All event types</option></select>
+      <input type="text" id="search" placeholder="Search message…" />
+      <button class="btn small" id="csv">Download CSV</button>
+    </div>
+
+    <section class="card" style="padding:0">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Time</th><th>Type</th><th>Event</th><th>Source</th></tr></thead>
+          <tbody id="rows"><tr><td colspan="4" class="list-empty">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+    <p class="note">Showing the latest 300 events.</p>
+  </main>
+
+  <script type="module">
+    import { requireLogin, r, onValue, query, limitToLast, connectionBadge, esc, dateTimeStr, $ } from "./js/app.js";
+
+    await requireLogin("events.html");
+    connectionBadge("conn");
+    let events = [];
+
+    function shown() {
+      const type = $("type").value, q = $("search").value.trim().toLowerCase();
+      return events.filter((e) => (!type || e.type === type) && (!q || (e.msg || "").toLowerCase().includes(q)));
+    }
+    function draw() {
+      const list = shown();
+      $("rows").innerHTML = list.length ? list.map((e) => `<tr>
+        <td style="white-space:nowrap">${dateTimeStr(e.t)}</td><td><span class="tag">${esc(e.type || "-")}</span></td>
+        <td>${esc(e.msg)}</td><td style="color:var(--muted)">${esc(e.source || "-")}</td></tr>`).join("")
+        : `<tr><td colspan="4" class="list-empty">No events yet.</td></tr>`;
+    }
+    $("type").onchange = draw;
+    $("search").oninput = draw;
+    $("csv").onclick = () => {
+      const q = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+      const csv = ["time,type,event,source", ...shown().map((e) => [new Date(e.t).toISOString(), e.type, e.msg, e.source].map(q).join(","))].join("\n");
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+      a.download = `smartlab-events-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+    };
+
+    onValue(query(r("events"), limitToLast(300)), (s) => {
+      events = Object.values(s.val() || {}).sort((a, b) => (b.t || 0) - (a.t || 0));
+      const types = [...new Set(events.map((e) => e.type).filter(Boolean))].sort();
+      const cur = $("type").value;
+      $("type").innerHTML = `<option value="">All event types</option>` + types.map((t) => `<option>${esc(t)}</option>`).join("");
+      $("type").value = types.includes(cur) ? cur : "";
+      draw();
+    });
+  </script>
+</body>
+</html>

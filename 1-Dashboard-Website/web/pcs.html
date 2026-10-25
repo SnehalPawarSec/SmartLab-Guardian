@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PC Monitoring · SmartLab Guardian</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%228%22 fill=%22%2316392b%22/%3E%3Cpath d=%22M9 17l5 5 9-11%22 stroke=%22%239fe0bb%22 stroke-width=%223.5%22 fill=%22none%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="guarded">
+  <main class="page">
+    <div class="page-head">
+      <div>
+        <div class="eyebrow" id="count">-- devices</div>
+        <h1>PC Monitoring</h1>
+        <p class="sub">Every lab computer running the SmartLab agent reports here live: computer name, logged-in user, usage and electricity. Click a PC for details and actions.</p>
+      </div>
+      <span class="badge warn" id="conn">● Connecting</span>
+    </div>
+
+    <section class="grid stats">
+      <div class="card stat"><div class="label">Active</div><div class="value on" id="nActive">--</div></div>
+      <div class="card stat"><div class="label">Idle</div><div class="value off" id="nIdle">--</div></div>
+      <div class="card stat"><div class="label">Offline</div><div class="value" id="nOff">--</div></div>
+      <div class="card stat"><div class="label">PC power now</div><div class="value" id="nPower">--</div></div>
+      <div class="card stat"><div class="label">PC energy today</div><div class="value" id="nEnergy">--</div></div>
+      <div class="card stat"><div class="label">PC cost today</div><div class="value" id="nCost">--</div></div>
+      <div class="card stat"><div class="label">Avg CPU (online)</div><div class="value" id="nCpu">--</div></div>
+    </section>
+
+    <div class="filters">
+      <div class="seg" id="filter">
+        <button data-f="ALL" class="sel">All</button><button data-f="ACTIVE">Active</button><button data-f="IDLE">Idle</button><button data-f="OFFLINE">Offline</button>
+      </div>
+      <input type="text" id="search" placeholder="Search PC or user name…" />
+    </div>
+
+    <div class="pc-grid" id="grid"><div class="card list-empty">Waiting for PCs… Run <code>pc_agent\run_agent.bat</code> on a lab PC.</div></div>
+  </main>
+
+  <div class="drawer-bg" id="drawerBg"></div>
+  <aside class="drawer" id="drawer" aria-label="PC details">
+    <div class="card-head"><h2 id="dName">PC</h2><button class="btn small" id="dClose">Close</button></div>
+    <div id="dBody"></div>
+    <h3 style="font-size:15px;margin:18px 0 10px">Remote actions</h3>
+    <label class="field"><span>Message to show on this PC</span><input type="text" id="dMsg" maxlength="200" placeholder="e.g. Please shut down the PC before leaving" /></label>
+    <div class="btn-row">
+      <button class="btn" data-act="message">Send message</button>
+      <button class="btn" data-act="lock">Lock PC</button>
+      <button class="btn danger" data-act="shutdown">Shut down</button>
+    </div>
+    <p class="note" id="dAck"></p>
+  </aside>
+
+  <script type="module">
+    import { requireLogin, r, onValue, set, serverTimestamp, connectionBadge, pcState, logEvent, withDefaults, fmt, esc, ago, dateTimeStr, $, toast } from "./js/app.js";
+
+    const user = await requireLogin("pcs.html");
+    connectionBadge("conn");
+
+    let computers = {}, commands = {}, settings = withDefaults(), filter = "ALL", openKey = null;
+
+    const pct = (v) => `<div class="bar"><i class="${v > 85 ? "hot" : ""}" style="width:${Math.min(100, Math.max(0, v || 0))}%"></i></div>`;
+    const dur = (s) => { s = Math.round(s || 0); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); return h ? `${h}h ${m}m` : `${m}m`; };
+
+    function card(key, pc) {
+      const st = pcState(pc);
+      const on = st !== "OFFLINE";
+      return `<div class="pc ${on ? "" : "offline"}" data-key="${esc(key)}">
+        <div class="pc-top"><span class="pc-name" title="${esc(pc.name || key)}">${esc(pc.name || key)}</span>
+          <span class="${on ? "dot-on" : "dot-off"}" style="font-size:12.5px">${on ? "ON" : "OFF"}</span></div>
+        <div class="pc-tags">${st === "IDLE" ? '<span class="pill idle">Idle</span>' : ""}
+          <span class="pill real" title="Logged-in user">👤 ${esc(pc.user || "—")}</span>
+          <span class="pill sim" style="background:#f3f0e8;color:#6d5b2e">${pc.type === "LAPTOP" ? "Laptop" : "Desktop"}</span></div>
+        <div class="tiles">
+          <div class="tile"><div class="label">CPU</div><div class="value">${on ? fmt(pc.cpu) : 0}%</div>${pct(on ? pc.cpu : 0)}</div>
+          <div class="tile"><div class="label">RAM</div><div class="value">${on ? fmt(pc.ram) : 0}%</div>${pct(on ? pc.ram : 0)}</div>
+          <div class="tile"><div class="label">Power</div><div class="value">${on ? fmt(pc.powerW) : 0} W</div></div>
+          <div class="tile"><div class="label">Energy today</div><div class="value">${fmt(pc.energyTodayKwh, 3)} kWh</div></div>
+          <div class="tile"><div class="label">Cost today</div><div class="value">₹ ${fmt((pc.energyTodayKwh || 0) * settings.tariff, 2)}</div></div>
+          <div class="tile"><div class="label">Active today</div><div class="value">${dur(pc.activeSecToday)}</div></div>
+        </div></div>`;
+    }
+
+    function draw() {
+      const entries = Object.entries(computers).filter(([, pc]) => !pc.simulated).sort(([a, pa], [b, pb]) => (pa.name || a).localeCompare(pb.name || b, undefined, { numeric: true }));
+      const q = $("search").value.trim().toLowerCase();
+      const shown = entries.filter(([k, pc]) =>
+        (filter === "ALL" || pcState(pc) === filter) &&
+        (!q || `${pc.name || k} ${pc.user || ""}`.toLowerCase().includes(q)));
+      $("count").textContent = `${entries.length} device${entries.length === 1 ? "" : "s"}`;
+      $("grid").innerHTML = shown.length ? shown.map(([k, pc]) => card(k, pc)).join("")
+        : `<div class="card list-empty">${entries.length ? "No PCs match this filter." : "Waiting for PCs… Run <code>pc_agent\\run_agent.bat</code> on a lab PC."}</div>`;
+      $("grid").querySelectorAll(".pc").forEach((el) => (el.onclick = () => openDrawer(el.dataset.key)));
+
+      const online = entries.filter(([, pc]) => pcState(pc) !== "OFFLINE").map(([, pc]) => pc);
+      $("nActive").textContent = online.filter((pc) => pcState(pc) === "ACTIVE").length;
+      $("nIdle").textContent = online.filter((pc) => pcState(pc) === "IDLE").length;
+      $("nOff").textContent = entries.length - online.length;
+      $("nPower").textContent = `${fmt(online.reduce((s, pc) => s + (pc.powerW || 0), 0))} W`;
+      const kwh = entries.reduce((s, [, pc]) => s + (pc.energyTodayKwh || 0), 0);
+      $("nEnergy").textContent = `${fmt(kwh, 3)} kWh`;
+      $("nCost").textContent = `₹ ${fmt(kwh * settings.tariff, 2)}`;
+      $("nCpu").textContent = online.length ? `${fmt(online.reduce((s, pc) => s + (pc.cpu || 0), 0) / online.length)}%` : "--";
+      if (openKey) drawDrawer();
+    }
+
+    function openDrawer(key) { openKey = key; drawDrawer(); $("drawer").classList.add("open"); $("drawerBg").classList.add("open"); }
+    function closeDrawer() { openKey = null; $("drawer").classList.remove("open"); $("drawerBg").classList.remove("open"); }
+    $("dClose").onclick = closeDrawer;
+    $("drawerBg").onclick = closeDrawer;
+
+    function drawDrawer() {
+      const pc = computers[openKey];
+      if (!pc) { closeDrawer(); return; }
+      const st = pcState(pc);
+      $("dName").textContent = pc.name || openKey;
+      const batt = pc.battery ? `${pc.battery.percent}% ${pc.battery.plugged ? "(charging)" : "(on battery)"}` : "—";
+      const rows = [
+        ["Status", `<span class="${st === "OFFLINE" ? "dot-off" : st === "IDLE" ? "dot-idle" : "dot-on"}">${st}</span>`],
+        ["Computer name", esc(pc.hostname || pc.name || openKey)],
+        ["Logged-in user", esc(pc.user || "— (update the agent to v2.1)")],
+        ["Type", esc(pc.type || "—")],
+        ["Processor", esc(pc.cpuModel || "—")],
+        ["RAM", pc.ramGB ? `${fmt(pc.ramGB, 1)} GB` : "—"],
+        ["OS", esc(pc.os || "—")],
+        ["Agent", `SmartLab agent v${esc(pc.agentVersion || "?")}`],
+        ["IP address", esc(pc.ip || "—")],
+        ["CPU / RAM", `${fmt(pc.cpu)}% / ${fmt(pc.ram)}%`],
+        ["Disk used", pc.disk !== undefined ? `${fmt(pc.disk)}%` : "—"],
+        ["Battery", batt],
+        ["Active app", esc(pc.activeApp || "—")],
+        ["Idle for", pc.idleSec !== undefined ? dur(pc.idleSec) : "—"],
+        ["Last activity", esc(pc.lastActivity || "—")],
+        ["Uptime", pc.uptimeSec ? dur(pc.uptimeSec) : "—"],
+        ["Est. power", `${fmt(pc.powerW)} W`],
+        ["Energy today", `${fmt(pc.energyTodayKwh, 3)} kWh (₹ ${fmt((pc.energyTodayKwh || 0) * settings.tariff, 2)})`],
+        ["Active / idle today", `${dur(pc.activeSecToday)} / ${dur(pc.idleSecToday)}`],
+        ["Last report", `${dateTimeStr(pc.lastSeen)} (${ago(pc.lastSeen)})`],
+      ];
+      $("dBody").innerHTML = `<dl class="kv">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>`;
+      const c = commands[openKey];
+      $("dAck").textContent = !c ? "" : c.doneId === c.id ? `Last action “${c.action}” done ${ago(c.doneAt)}: ${c.result || "ok"}` : `Action “${c.action}” sent, waiting for the PC…`;
+      document.querySelectorAll("[data-act]").forEach((b) => (b.disabled = st === "OFFLINE"
+        || (b.dataset.act === "shutdown" && !pc.allowShutdown) || (b.dataset.act === "lock" && pc.allowLock === false)));
+    }
+
+    document.querySelectorAll("[data-act]").forEach((b) => (b.onclick = async () => {
+      const act = b.dataset.act;
+      const pc = computers[openKey];
+      const text = $("dMsg").value.trim() || "Message from lab staff";
+      if (act === "shutdown" && !confirm(`Shut down ${pc.name}? It will turn off in 60 seconds.`)) return;
+      await set(r(`pcCommands/${openKey}`), { id: `${Date.now()}`, action: act, text, by: user.username, at: serverTimestamp() });
+      await logEvent("PC_COMMAND", `${act} sent to ${pc.name}${act === "message" ? `: "${text}"` : ""}`, user);
+      toast(`${act} sent to ${pc.name}`);
+    }));
+
+    document.querySelectorAll("#filter button").forEach((b) => (b.onclick = () => {
+      filter = b.dataset.f; document.querySelectorAll("#filter button").forEach((x) => x.classList.toggle("sel", x === b)); draw();
+    }));
+    $("search").oninput = draw;
+
+    onValue(r("computers"), (s) => { computers = s.val() || {}; draw(); });
+    onValue(r("settings"), (s) => { settings = withDefaults(s.val()); draw(); });
+    onValue(r("pcCommands"), (s) => { commands = s.val() || {}; if (openKey) drawDrawer(); });
+    setInterval(draw, 5000);
+  </script>
+</body>
+</html>
